@@ -4,15 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { usePlayer } from '@/context/PlayerContext';
-import { Play, Pause, Disc, LayoutGrid, List, Plus } from 'lucide-react';
-
-const DEFAULT_COVER = 'https://images.unsplash.com/photo-1571266028243-3716f02d2d2e?w=800&auto=format&fit=crop&q=60';
+import { Play, Pause, Disc, LayoutGrid, List, Plus, Music } from 'lucide-react';
 
 export default function HomePage() {
   const [mixes, setMixes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dbError, setDbError] = useState(null);
   const [viewMode, setViewMode] = useState('list'); // 'list' o 'grid'
+  const [imageErrors, setImageErrors] = useState({});
   const { currentMix, isPlaying, playMix } = usePlayer();
 
   useEffect(() => {
@@ -37,6 +36,10 @@ export default function HomePage() {
 
     fetchMixes();
   }, []);
+
+  const handleImageError = (id) => {
+    setImageErrors((prev) => ({ ...prev, [id]: true }));
+  };
 
   return (
     <main className="min-h-screen bg-[#0d0e12] text-neutral-100 px-4 sm:px-8 py-10 pb-40">
@@ -118,6 +121,7 @@ export default function HomePage() {
             {mixes.map((mix, index) => {
               const isThisPlaying = currentMix?.id === mix.id && isPlaying;
               const isSelected = currentMix?.id === mix.id;
+              const hasCover = mix.cover_url && !imageErrors[mix.id];
 
               return (
                 <div
@@ -127,19 +131,29 @@ export default function HomePage() {
                     isSelected ? 'bg-neutral-900/90' : ''
                   }`}
                 >
-                  {/* Izquierda: Número + Portada + Títulos */}
+                  {/* Izquierda: Número + Portada/Nombre + Títulos */}
                   <div className="flex items-center gap-4 min-w-0 pr-4">
                     <span className="font-mono text-xs text-neutral-600 w-5 text-right flex-shrink-0 group-hover:text-amber-500 transition">
                       {String(index + 1).padStart(2, '0')}
                     </span>
 
-                    <div className="relative w-12 h-12 rounded bg-neutral-900 flex-shrink-0 overflow-hidden border border-neutral-800">
-                      <img
-                        src={mix.cover_url || DEFAULT_COVER}
-                        alt={mix.title}
-                        onError={(e) => { e.currentTarget.src = DEFAULT_COVER; }}
-                        className="w-full h-full object-cover"
-                      />
+                    <div className="relative w-12 h-12 rounded bg-gradient-to-br from-neutral-800 to-neutral-950 flex-shrink-0 overflow-hidden border border-neutral-800 flex items-center justify-center text-center p-1">
+                      {hasCover ? (
+                        <img
+                          src={mix.cover_url}
+                          alt={mix.title}
+                          onError={() => handleImageError(mix.id)}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center w-full h-full">
+                          <Music className="w-3.5 h-3.5 text-amber-500 mb-0.5" />
+                          <span className="text-[8px] font-mono font-bold text-neutral-300 uppercase line-clamp-1 leading-tight px-0.5">
+                            {mix.title || 'SET'}
+                          </span>
+                        </div>
+                      )}
+
                       <div className={`absolute inset-0 bg-black/40 flex items-center justify-center transition ${isThisPlaying ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
                         {isThisPlaying ? (
                           <Pause className="w-5 h-5 text-amber-400 fill-current" />
@@ -182,6 +196,7 @@ export default function HomePage() {
             {mixes.map((mix) => {
               const isThisPlaying = currentMix?.id === mix.id && isPlaying;
               const isSelected = currentMix?.id === mix.id;
+              const hasCover = mix.cover_url && !imageErrors[mix.id];
 
               return (
                 <div
@@ -189,13 +204,22 @@ export default function HomePage() {
                   onClick={() => playMix(mix)}
                   className="group cursor-pointer flex flex-col"
                 >
-                  <div className="relative aspect-square w-full rounded-md overflow-hidden bg-neutral-900 border border-neutral-800/80 shadow-md">
-                    <img
-                      src={mix.cover_url || DEFAULT_COVER}
-                      alt={mix.title}
-                      onError={(e) => { e.currentTarget.src = DEFAULT_COVER; }}
-                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300 brightness-95 group-hover:brightness-100"
-                    />
+                  <div className="relative aspect-square w-full rounded-md overflow-hidden bg-gradient-to-br from-neutral-800 via-neutral-900 to-black border border-neutral-800/80 shadow-md flex items-center justify-center p-4">
+                    {hasCover ? (
+                      <img
+                        src={mix.cover_url}
+                        alt={mix.title}
+                        onError={() => handleImageError(mix.id)}
+                        className="w-full h-full object-cover group-hover:scale-105 transition duration-300 brightness-95 group-hover:brightness-100"
+                      />
+                    ) : (
+                      <div className="text-center flex flex-col items-center justify-center p-2">
+                        <Disc className="w-8 h-8 text-neutral-700 mb-2 group-hover:text-amber-500/80 transition" />
+                        <span className="text-xs font-mono font-bold text-neutral-200 uppercase line-clamp-3 leading-snug">
+                          {mix.title || 'SET'}
+                        </span>
+                      </div>
+                    )}
 
                     {/* Tag de género en la esquina */}
                     {mix.genre && (

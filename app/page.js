@@ -126,7 +126,7 @@ export default function HomePage() {
               return (
                 <div
                   key={mix.id}
-                  onClick={() => playMix(mix)}
+                  onClick={() => playMix(mix, mixes)}
                   className={`group flex items-center justify-between py-3.5 px-3 transition cursor-pointer rounded-lg hover:bg-neutral-900/80 ${
                     isSelected ? 'bg-neutral-900/90' : ''
                   }`}
@@ -201,7 +201,7 @@ export default function HomePage() {
               return (
                 <div
                   key={mix.id}
-                  onClick={() => playMix(mix)}
+                  onClick={() => playMix(mix, mixes)}
                   className="group cursor-pointer flex flex-col"
                 >
                   <div className="relative aspect-square w-full rounded-md overflow-hidden bg-gradient-to-br from-neutral-800 via-neutral-900 to-black border border-neutral-800/80 shadow-md flex items-center justify-center p-4">

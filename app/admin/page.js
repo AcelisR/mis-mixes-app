@@ -1,14 +1,19 @@
 'use client';
 export const dynamic = 'force-dynamic';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Upload, CheckCircle2, AlertCircle, Music, Image as ImageIcon } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Upload, CheckCircle2, AlertCircle, Music, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState('');
   const [status, setStatus] = useState({ type: '', msg: '' });
+
+  // Lista de mixes existentes y estado de borrado
+  const [mixes, setMixes] = useState([]);
+  const [loadingMixes, setLoadingMixes] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
 
   // Archivos seleccionados
   const [audioFile, setAudioFile] = useState(null);
@@ -26,6 +31,28 @@ export default function AdminPage() {
   const [tracklist, setTracklist] = useState([
     { time: '00:00', song: '' }
   ]);
+
+  // Cargar mixes al montar
+  useEffect(() => {
+    fetchMixes();
+  }, []);
+
+  const fetchMixes = async () => {
+    try {
+      setLoadingMixes(true);
+      const { data, error } = await supabase
+        .from('mixes')
+        .select('*')
+        .order('id', { ascending: false });
+
+      if (error) throw error;
+      setMixes(data || []);
+    } catch (err) {
+      console.error('Error al cargar mixes:', err);
+    } finally {
+      setLoadingMixes(false);
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -123,6 +150,9 @@ export default function AdminPage() {
       setAudioFile(null);
       setCoverFile(null);
       setTracklist([{ time: '00:00', song: '' }]);
+
+      // Refrescar listado
+      fetchMixes();
     } catch (err) {
       console.error(err);
       setStatus({ type: 'error', msg: err.message || 'Error durante la subida.' });
@@ -132,12 +162,55 @@ export default function AdminPage() {
     }
   };
 
+  // Función para eliminar un mix tanto de Storage como de la BD
+  const handleDelete = async (mix) => {
+    const confirmDelete = window.confirm(`¿Estás seguro de que deseas eliminar permanentemente el set "${mix.title}"?`);
+    if (!confirmDelete) return;
+
+    setDeletingId(mix.id);
+    setStatus({ type: '', msg: '' });
+
+    try {
+      // 1. Eliminar archivo de audio de Supabase Storage si existe
+      if (mix.audio_url) {
+        const audioPath = mix.audio_url.split('/audios/').pop();
+        if (audioPath) {
+          await supabase.storage.from('audios').remove([decodeURIComponent(audioPath)]);
+        }
+      }
+
+      // 2. Eliminar carátula de Supabase Storage si existe
+      if (mix.cover_url) {
+        const coverPath = mix.cover_url.split('/covers/').pop();
+        if (coverPath) {
+          await supabase.storage.from('covers').remove([decodeURIComponent(coverPath)]);
+        }
+      }
+
+      // 3. Eliminar fila de la base de datos
+      const { error: deleteErr } = await supabase
+        .from('mixes')
+        .delete()
+        .eq('id', mix.id);
+
+      if (deleteErr) throw deleteErr;
+
+      setMixes((prev) => prev.filter((m) => m.id !== mix.id));
+      setStatus({ type: 'success', msg: `"${mix.title}" ha sido eliminado exitosamente.` });
+    } catch (err) {
+      console.error('Error al eliminar:', err);
+      setStatus({ type: 'error', msg: err.message || 'No se pudo eliminar el set.' });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#0d0e12] text-neutral-100 px-4 sm:px-8 py-10 pb-32">
-      <div className="max-w-3xl mx-auto">
+      <div className="max-w-3xl mx-auto space-y-10">
         
         {/* Barra superior de navegación */}
-        <div className="flex items-center justify-between border-b border-neutral-800/80 pb-6 mb-8">
+        <div className="flex items-center justify-between border-b border-neutral-800/80 pb-6">
           <Link
             href="/"
             className="flex items-center gap-2 text-xs font-mono text-neutral-400 hover:text-white transition"
@@ -145,37 +218,38 @@ export default function AdminPage() {
             <ArrowLeft className="w-4 h-4" /> VOLVER AL ARCHIVO
           </Link>
           <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 uppercase tracking-wider">
-            Cargador Directo
+            Panel de Control
           </span>
         </div>
 
-        <div className="mb-8">
+        <div>
           <h1 className="text-2xl sm:text-3xl font-black font-mono tracking-tight uppercase">
-            Subir Sesión
+            Administrar Sesiones
           </h1>
           <p className="text-xs text-neutral-400 font-mono mt-1">
-            Sube el archivo de audio y la portada directamente a Supabase Storage.
+            Sube nuevas pistas o elimina grabaciones de tu almacenamiento.
           </p>
         </div>
 
         {/* Notificaciones */}
         {status.msg && (
-          <div className={`p-4 rounded-lg mb-6 text-xs font-mono flex items-center gap-2 ${
+          <div className={`p-4 rounded-lg text-xs font-mono flex items-center gap-2 ${
             status.type === 'success' 
               ? 'bg-emerald-950/40 border border-emerald-800 text-emerald-300' 
               : 'bg-red-950/40 border border-red-800 text-red-300'
           }`}>
-            {status.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
-            {status.msg}
+            {status.type === 'success' ? <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> : <AlertCircle className="w-4 h-4 flex-shrink-0" />}
+            <span>{status.msg}</span>
           </div>
         )}
 
+        {/* FORMULARIO DE SUBIDA */}
         <form onSubmit={handleSubmit} className="space-y-6">
           
           {/* Subida de Archivos */}
           <div className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-5 sm:p-6 space-y-4">
             <h2 className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider border-b border-neutral-800/60 pb-2">
-              01. Archivos de tu Computador
+              01. Archivos de tu Dispositivo
             </h2>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -285,7 +359,7 @@ export default function AdminPage() {
               <button
                 type="button"
                 onClick={addTrackRow}
-                className="flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 transition"
+                className="flex items-center gap-1 text-[11px] font-mono text-amber-400 hover:text-amber-300 transition cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> AGREGAR PISTA
               </button>
@@ -312,7 +386,7 @@ export default function AdminPage() {
                     type="button"
                     onClick={() => removeTrackRow(idx)}
                     disabled={tracklist.length === 1}
-                    className="p-1.5 text-neutral-600 hover:text-red-400 disabled:opacity-20 transition"
+                    className="p-1.5 text-neutral-600 hover:text-red-400 disabled:opacity-20 transition cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -328,15 +402,74 @@ export default function AdminPage() {
             className="w-full py-3 bg-neutral-100 hover:bg-white text-neutral-950 font-bold font-mono text-xs uppercase tracking-wider rounded-xl transition flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
           >
             {loading ? (
-              uploadProgress || 'Subiendo...'
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {uploadProgress || 'Subiendo...'}
+              </>
             ) : (
               <>
                 <Upload className="w-4 h-4" /> Subir y Publicar Sesión
               </>
             )}
           </button>
-
         </form>
+
+        {/* SECCIÓN: LISTADO Y ELIMINACIÓN DE MIXES */}
+        <section className="bg-neutral-900/60 border border-neutral-800/80 rounded-xl p-5 sm:p-6 space-y-4">
+          <div className="flex items-center justify-between border-b border-neutral-800/60 pb-3">
+            <h2 className="text-xs font-mono font-bold text-neutral-400 uppercase tracking-wider">
+              04. Sesiones en Línea ({mixes.length})
+            </h2>
+            <button
+              type="button"
+              onClick={fetchMixes}
+              className="text-[11px] font-mono text-neutral-500 hover:text-neutral-300 transition"
+            >
+              Actualizar
+            </button>
+          </div>
+
+          {loadingMixes ? (
+            <div className="py-8 text-center text-xs font-mono text-neutral-500 flex items-center justify-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-amber-500" /> Cargando sesiones registradas...
+            </div>
+          ) : mixes.length === 0 ? (
+            <p className="py-6 text-center text-xs font-mono text-neutral-600">
+              No hay mixes subidos aún.
+            </p>
+          ) : (
+            <div className="divide-y divide-neutral-800/60">
+              {mixes.map((mix) => (
+                <div key={mix.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-sm font-semibold text-neutral-200 truncate">
+                      {mix.title}
+                    </h3>
+                    <p className="text-xs text-neutral-500 font-mono truncate">
+                      {mix.dj || 'DJ'} • {mix.genre || 'Género'} • {mix.duration || '--:--'}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(mix)}
+                    disabled={deletingId === mix.id}
+                    className="p-2 rounded-lg bg-red-950/30 border border-red-900/40 text-red-400 hover:bg-red-900/60 hover:text-red-200 transition disabled:opacity-40 flex items-center gap-1.5 text-xs font-mono flex-shrink-0 cursor-pointer"
+                    title="Eliminar sesión permanentemente"
+                  >
+                    {deletingId === mix.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-red-400" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span className="hidden sm:inline">Eliminar</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
       </div>
     </main>
   );

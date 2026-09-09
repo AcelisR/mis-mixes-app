@@ -4,71 +4,67 @@ import { createContext, useContext, useState, useRef, useEffect } from 'react';
 const PlayerContext = createContext();
 
 export function PlayerProvider({ children }) {
+  const [playlist, setPlaylist] = useState([]);
   const [currentMix, setCurrentMix] = useState(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [isShuffle, setIsShuffle] = useState(false);
+
   const audioRef = useRef(null);
 
   useEffect(() => {
-    if (!audioRef.current) {
+    if (typeof window !== 'undefined') {
       audioRef.current = new Audio();
+
+      const audio = audioRef.current;
+
+      const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
+      const handleLoadedMetadata = () => setDuration(audio.duration);
+      const handleEnded = () => playNext();
+
+      audio.addEventListener('timeupdate', handleTimeUpdate);
+      audio.addEventListener('loadedmetadata', handleLoadedMetadata);
+      audio.addEventListener('ended', handleEnded);
+
+      return () => {
+        audio.removeEventListener('timeupdate', handleTimeUpdate);
+        audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        audio.removeEventListener('ended', handleEnded);
+        audio.pause();
+      };
     }
-    const audio = audioRef.current;
+  }, [playlist, currentMix, isShuffle]);
 
-    const updateTime = () => setCurrentTime(audio.currentTime);
-    const updateDuration = () => setDuration(audio.duration || 0);
-    const handleEnded = () => setIsPlaying(false);
-
-    audio.addEventListener('timeupdate', updateTime);
-    audio.addEventListener('loadedmetadata', updateDuration);
-    audio.addEventListener('ended', handleEnded);
-
-    return () => {
-      audio.removeEventListener('timeupdate', updateTime);
-      audio.removeEventListener('loadedmetadata', updateDuration);
-      audio.removeEventListener('ended', handleEnded);
-    };
-  }, []);
-
-  // Metadatos para pantalla del auto y controles Bluetooth
-  useEffect(() => {
-    if (currentMix && 'mediaSession' in navigator) {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: currentMix.title,
-        artist: currentMix.dj || 'Mi Mix',
-        album: 'Mis Sesiones',
-        artwork: [
-          { src: currentMix.cover_url || 'https://picsum.photos/400/400', sizes: '512x512', type: 'image/jpeg' }
-        ]
-      });
-
-      navigator.mediaSession.setActionHandler('play', play);
-      navigator.mediaSession.setActionHandler('pause', pause);
-      navigator.mediaSession.setActionHandler('seekbackward', () => skip(-15));
-      navigator.mediaSession.setActionHandler('seekforward', () => skip(15));
+  const playMix = (mix, list = null) => {
+    if (list && list.length > 0) {
+      setPlaylist(list);
     }
-  }, [currentMix]);
-
-  const playMix = (mix) => {
     if (currentMix?.id === mix.id) {
       if (isPlaying) {
-        pause();
+        audioRef.current.pause();
+        setIsPlaying(false);
       } else {
-        play();
+        audioRef.current.play();
+        setIsPlaying(true);
       }
       return;
     }
+
     setCurrentMix(mix);
     if (audioRef.current) {
       audioRef.current.src = mix.audio_url;
-      audioRef.current.play();
-      setIsPlaying(true);
+      audioRef.current.play().then(() => {
+        setIsPlaying(true);
+      }).catch(err => {
+        console.error("Error al reproducir audio:", err);
+        setIsPlaying(false);
+      });
     }
   };
 
   const play = () => {
-    if (audioRef.current) {
+    if (audioRef.current && currentMix) {
       audioRef.current.play();
       setIsPlaying(true);
     }
@@ -81,33 +77,68 @@ export function PlayerProvider({ children }) {
     }
   };
 
-  const skip = (seconds) => {
+  const seek = (time) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = Math.min(
-        Math.max(0, audioRef.current.currentTime + seconds),
-        duration || 0
-      );
+      audioRef.current.currentTime = time;
+      setCurrentTime(time);
     }
   };
 
-  const seek = (seconds) => {
+  const skip = (seconds) => {
     if (audioRef.current) {
-      audioRef.current.currentTime = seconds;
+      audioRef.current.currentTime = Math.max(0, Math.min(audioRef.current.currentTime + seconds, duration));
     }
+  };
+
+  const playNext = () => {
+    if (!playlist.length || !currentMix) return;
+
+    if (isShuffle) {
+      // Elegir uno aleatorio distinto al actual
+      const available = playlist.filter(m => m.id !== currentMix.id);
+      const nextMix = available.length > 0 
+        ? available[Math.floor(Math.random() * available.length)]
+        : playlist[0];
+      playMix(nextMix);
+    } else {
+      const currentIndex = playlist.findIndex(m => m.id === currentMix.id);
+      const nextIndex = (currentIndex + 1) % playlist.length;
+      playMix(playlist[nextIndex]);
+    }
+  };
+
+  const playPrevious = () => {
+    if (!playlist.length || !currentMix) return;
+
+    const currentIndex = playlist.findIndex(m => m.id === currentMix.id);
+    const prevIndex = (currentIndex - 1 + playlist.length) % playlist.length;
+    playMix(playlist[prevIndex]);
+  };
+
+  const toggleShuffle = () => {
+    setIsShuffle(prev => !prev);
   };
 
   return (
-    <PlayerContext.Provider value={{
-      currentMix,
-      isPlaying,
-      currentTime,
-      duration,
-      playMix,
-      play,
-      pause,
-      skip,
-      seek
-    }}>
+    <PlayerContext.Provider
+      value={{
+        playlist,
+        setPlaylist,
+        currentMix,
+        isPlaying,
+        currentTime,
+        duration,
+        isShuffle,
+        playMix,
+        play,
+        pause,
+        seek,
+        skip,
+        playNext,
+        playPrevious,
+        toggleShuffle,
+      }}
+    >
       {children}
     </PlayerContext.Provider>
   );

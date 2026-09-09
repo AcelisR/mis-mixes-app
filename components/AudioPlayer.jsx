@@ -1,6 +1,6 @@
 'use client';
 import { usePlayer } from '@/context/PlayerContext';
-import { Play, Pause, RotateCcw, RotateCw, ListMusic, Music } from 'lucide-react';
+import { Play, Pause, RotateCcw, RotateCw, ListMusic, Music, Shuffle, SkipBack, SkipForward } from 'lucide-react';
 import { useState } from 'react';
 
 function formatTime(seconds) {
@@ -11,7 +11,21 @@ function formatTime(seconds) {
 }
 
 export default function AudioPlayer() {
-  const { currentMix, isPlaying, currentTime, duration, play, pause, skip, seek } = usePlayer();
+  const {
+    currentMix,
+    isPlaying,
+    currentTime,
+    duration,
+    isShuffle,
+    play,
+    pause,
+    skip,
+    seek,
+    playNext,
+    playPrevious,
+    toggleShuffle,
+  } = usePlayer();
+
   const [showTracklist, setShowTracklist] = useState(false);
   const [imgError, setImgError] = useState(false);
 
@@ -23,7 +37,7 @@ export default function AudioPlayer() {
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#12141a]/95 backdrop-blur-md border-t border-neutral-800 text-neutral-200 p-3 sm:p-4 shadow-2xl">
       <div className="max-w-5xl mx-auto flex flex-col gap-2">
         
-        {/* Barra de Progreso Minimalista */}
+        {/* Barra de Progreso */}
         <div className="flex items-center gap-3 text-[11px] font-mono text-neutral-500">
           <span>{formatTime(currentTime)}</span>
           <input
@@ -38,7 +52,7 @@ export default function AudioPlayer() {
         </div>
 
         {/* Fila de Controles */}
-        <div className="flex items-center justify-between gap-4 pt-1">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 pt-1">
           
           {/* Metadata actual */}
           <div className="flex items-center gap-3 w-1/3 min-w-0">
@@ -66,19 +80,34 @@ export default function AudioPlayer() {
             </div>
           </div>
 
-          {/* Botones de reproducción */}
-          <div className="flex items-center gap-3">
+          {/* Botones Centrales de Reproducción */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
+            {/* Botón Shuffle / Aleatorio */}
             <button
-              onClick={() => skip(-15)}
-              className="p-1.5 text-neutral-500 hover:text-neutral-200 transition active:scale-95"
-              title="-15s"
+              onClick={toggleShuffle}
+              className={`p-1.5 rounded transition active:scale-95 ${
+                isShuffle 
+                  ? 'text-amber-400 bg-amber-500/10' 
+                  : 'text-neutral-500 hover:text-neutral-300'
+              }`}
+              title={isShuffle ? 'Modo aleatorio activado' : 'Activar modo aleatorio'}
             >
-              <RotateCcw className="w-4 h-4" />
+              <Shuffle className="w-4 h-4" />
             </button>
 
+            {/* Anterior */}
+            <button
+              onClick={playPrevious}
+              className="p-1.5 text-neutral-400 hover:text-neutral-100 transition active:scale-95"
+              title="Anterior"
+            >
+              <SkipBack className="w-4 h-4" />
+            </button>
+
+            {/* Play / Pause Principal */}
             <button
               onClick={isPlaying ? pause : play}
-              className="w-10 h-10 bg-neutral-100 hover:bg-white text-neutral-950 rounded-full flex items-center justify-center transition shadow-lg active:scale-95"
+              className="w-10 h-10 bg-neutral-100 hover:bg-white text-neutral-950 rounded-full flex items-center justify-center transition shadow-lg active:scale-95 mx-1"
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
@@ -87,12 +116,22 @@ export default function AudioPlayer() {
               )}
             </button>
 
+            {/* Siguiente */}
+            <button
+              onClick={playNext}
+              className="p-1.5 text-neutral-400 hover:text-neutral-100 transition active:scale-95"
+              title="Siguiente"
+            >
+              <SkipForward className="w-4 h-4" />
+            </button>
+
+            {/* Botón rápido +15s */}
             <button
               onClick={() => skip(15)}
-              className="p-1.5 text-neutral-500 hover:text-neutral-200 transition active:scale-95"
+              className="hidden sm:block p-1.5 text-neutral-500 hover:text-neutral-200 transition active:scale-95"
               title="+15s"
             >
-              <RotateCw className="w-4 h-4" />
+              <RotateCw className="w-3.5 h-3.5" />
             </button>
           </div>
 

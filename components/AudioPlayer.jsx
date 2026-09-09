@@ -1,13 +1,35 @@
 'use client';
 import { usePlayer } from '@/context/PlayerContext';
-import { Play, Pause, RotateCcw, RotateCw, ListMusic, Music, Shuffle, SkipBack, SkipForward } from 'lucide-react';
-import { useState } from 'react';
+import { 
+  Play, 
+  Pause, 
+  RotateCw, 
+  ListMusic, 
+  Music, 
+  Shuffle, 
+  SkipBack, 
+  SkipForward, 
+  Volume2, 
+  VolumeX, 
+  Volume1 
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 function formatTime(seconds) {
   if (isNaN(seconds) || seconds === null) return '00:00';
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Convierte '03:45' o '01:12:30' a segundos numéricos
+function parseTimestamp(timeStr) {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(':').map(Number);
+  if (parts.some(isNaN)) return 0;
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
 }
 
 export default function AudioPlayer() {
@@ -17,6 +39,8 @@ export default function AudioPlayer() {
     currentTime,
     duration,
     isShuffle,
+    volume = 1,
+    setVolume,
     play,
     pause,
     skip,
@@ -28,10 +52,32 @@ export default function AudioPlayer() {
 
   const [showTracklist, setShowTracklist] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [prevVolume, setPrevVolume] = useState(1);
+
+  // Reiniciar fallback de imagen al cambiar de mix
+  useEffect(() => {
+    setImgError(false);
+  }, [currentMix?.cover_url]);
 
   if (!currentMix) return null;
 
   const hasCover = Boolean(currentMix.cover_url && !imgError);
+
+  const toggleMute = () => {
+    if (!setVolume) return;
+    if (volume > 0) {
+      setPrevVolume(volume);
+      setVolume(0);
+    } else {
+      setVolume(prevVolume || 0.8);
+    }
+  };
+
+  const handleTrackClick = (timeStr) => {
+    const targetSeconds = parseTimestamp(timeStr);
+    seek(targetSeconds);
+    if (!isPlaying) play();
+  };
 
   return (
     <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#12141a]/95 backdrop-blur-md border-t border-neutral-800 text-neutral-200 p-3 sm:p-4 shadow-2xl">
@@ -39,7 +85,7 @@ export default function AudioPlayer() {
         
         {/* Barra de Progreso */}
         <div className="flex items-center gap-3 text-[11px] font-mono text-neutral-500">
-          <span>{formatTime(currentTime)}</span>
+          <span className="w-10 text-right">{formatTime(currentTime)}</span>
           <input
             type="range"
             min="0"
@@ -48,7 +94,7 @@ export default function AudioPlayer() {
             onChange={(e) => seek(Number(e.target.value))}
             className="w-full h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
           />
-          <span>{formatTime(duration)}</span>
+          <span className="w-10">{formatTime(duration)}</span>
         </div>
 
         {/* Fila de Controles */}
@@ -80,9 +126,8 @@ export default function AudioPlayer() {
             </div>
           </div>
 
-          {/* Botones Centrales de Reproducción */}
+          {/* Botones Centrales */}
           <div className="flex items-center gap-1.5 sm:gap-2.5">
-            {/* Botón Shuffle / Aleatorio */}
             <button
               onClick={toggleShuffle}
               className={`p-1.5 rounded transition active:scale-95 ${
@@ -95,7 +140,6 @@ export default function AudioPlayer() {
               <Shuffle className="w-4 h-4" />
             </button>
 
-            {/* Anterior */}
             <button
               onClick={playPrevious}
               className="p-1.5 text-neutral-400 hover:text-neutral-100 transition active:scale-95"
@@ -104,7 +148,6 @@ export default function AudioPlayer() {
               <SkipBack className="w-4 h-4" />
             </button>
 
-            {/* Play / Pause Principal */}
             <button
               onClick={isPlaying ? pause : play}
               className="w-10 h-10 bg-neutral-100 hover:bg-white text-neutral-950 rounded-full flex items-center justify-center transition shadow-lg active:scale-95 mx-1"
@@ -116,7 +159,6 @@ export default function AudioPlayer() {
               )}
             </button>
 
-            {/* Siguiente */}
             <button
               onClick={playNext}
               className="p-1.5 text-neutral-400 hover:text-neutral-100 transition active:scale-95"
@@ -125,7 +167,6 @@ export default function AudioPlayer() {
               <SkipForward className="w-4 h-4" />
             </button>
 
-            {/* Botón rápido +15s */}
             <button
               onClick={() => skip(15)}
               className="hidden sm:block p-1.5 text-neutral-500 hover:text-neutral-200 transition active:scale-95"
@@ -135,8 +176,34 @@ export default function AudioPlayer() {
             </button>
           </div>
 
-          {/* Tracklist Botón */}
-          <div className="flex justify-end w-1/3">
+          {/* Utilidades: Volumen y Tracklist */}
+          <div className="flex items-center justify-end gap-3 w-1/3">
+            {setVolume && (
+              <div className="hidden md:flex items-center gap-2 group">
+                <button 
+                  onClick={toggleMute} 
+                  className="text-neutral-400 hover:text-neutral-200 transition"
+                >
+                  {volume === 0 ? (
+                    <VolumeX className="w-4 h-4 text-neutral-500" />
+                  ) : volume < 0.5 ? (
+                    <Volume1 className="w-4 h-4" />
+                  ) : (
+                    <Volume2 className="w-4 h-4" />
+                  )}
+                </button>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.01"
+                  value={volume}
+                  onChange={(e) => setVolume(Number(e.target.value))}
+                  className="w-16 h-1 bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                />
+              </div>
+            )}
+
             {currentMix.tracklist && currentMix.tracklist.length > 0 && (
               <button
                 onClick={() => setShowTracklist(!showTracklist)}
@@ -153,21 +220,26 @@ export default function AudioPlayer() {
           </div>
         </div>
 
-        {/* Desplegable de Tracklist */}
+        {/* Desplegable de Tracklist interactivo */}
         {showTracklist && currentMix.tracklist && (
-          <div className="mt-2 pt-3 border-t border-neutral-800/80 max-h-40 overflow-y-auto">
+          <div className="mt-2 pt-3 border-t border-neutral-800/80 max-h-44 overflow-y-auto">
             <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-wider mb-2">
-              Índice de pistas
+              Índice de pistas (haz clic para reproducir)
             </div>
             <div className="flex flex-col divide-y divide-neutral-800/40">
               {currentMix.tracklist.map((item, idx) => (
-                <div
+                <button
                   key={idx}
-                  className="flex items-center justify-between text-xs py-1.5 px-1 hover:bg-neutral-800/40 transition"
+                  onClick={() => handleTrackClick(item.time)}
+                  className="flex items-center justify-between text-xs py-1.5 px-2 hover:bg-neutral-800/60 rounded text-left transition group"
                 >
-                  <span className="text-neutral-300 truncate pr-4">{item.song}</span>
-                  <span className="text-neutral-500 font-mono text-[11px] flex-shrink-0">{item.time}</span>
-                </div>
+                  <span className="text-neutral-300 group-hover:text-amber-400 truncate pr-4">
+                    {item.song}
+                  </span>
+                  <span className="text-neutral-500 font-mono text-[11px] flex-shrink-0 group-hover:text-neutral-300">
+                    {item.time}
+                  </span>
+                </button>
               ))}
             </div>
           </div>
